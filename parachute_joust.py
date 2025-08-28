@@ -75,14 +75,17 @@ class Player:
         self.controls = controls
         self.rect = pygame.Rect(0, 0, 20, 35)
         self.cooldown = 0
+        # phase used to animate rag-doll limb flailing
+        self.flail_phase = random.random() * math.tau
 
-    def update(self, dt):
+    def update(self, dt, slowed=False):
         keys = pygame.key.get_pressed()
         acc = pygame.Vector2(0, 0)
+        speed = 0.7 if slowed else 1.0
         if keys[self.controls['left']]:
-            acc.x -= 200
+            acc.x -= 200 * speed
         if keys[self.controls['right']]:
-            acc.x += 200
+            acc.x += 200 * speed
         # Soft force toward center
         if self.pos.x < 50:
             acc.x += (50 - self.pos.x) * 2
@@ -90,36 +93,65 @@ class Player:
             acc.x -= (self.pos.x - (WIDTH - 50)) * 2
         self.vel.x += acc.x * dt
         self.vel.x *= 0.98
-        self.pos.x += self.vel.x * dt
+        self.pos.x += self.vel.x * dt * speed
 
         if keys[self.controls['faster']]:
-            self.vel.y += 300 * dt
+            self.vel.y += 300 * dt * speed
         if keys[self.controls['slower']]:
-            self.vel.y -= 300 * dt
-        self.vel.y += 500 * dt
-        self.pos.y += self.vel.y * dt
+            self.vel.y -= 300 * dt * speed
+        self.vel.y += 500 * dt * speed
+        self.pos.y += self.vel.y * dt * speed
         self.rect.topleft = (self.pos.x - 10, self.pos.y - 20)
         if self.cooldown > 0:
             self.cooldown -= dt
+        self.flail_phase += dt * 5
 
-    def draw(self, surf, glow=False, offset_y=0):
-        # Head
-        head_center = (int(self.pos.x), int(self.pos.y - 15 - offset_y))
+    def draw(self, surf, glow=False, offset_y=0, holding_chute=False):
+        head_center = (int(self.pos.x), int(self.pos.y - 20 - offset_y))
         pygame.draw.circle(surf, (255, 224, 189), head_center, 8)
-        # Body
-        body_rect = pygame.Rect(int(self.pos.x - 10), int(self.pos.y - 5 - offset_y), 20, 25)
-        pygame.draw.rect(surf, self.color, body_rect)
-        # Arms
-        pygame.draw.line(surf, self.color,
-                         (self.pos.x - 10, self.pos.y - offset_y),
-                         (self.pos.x + 10, self.pos.y - offset_y), 3)
+        # Torso
+        body_start = (self.pos.x, self.pos.y - 12 - offset_y)
+        body_end = (self.pos.x, self.pos.y + 8 - offset_y)
+        pygame.draw.line(surf, self.color, body_start, body_end, 4)
+
+        shoulder = pygame.Vector2(self.pos.x, self.pos.y - 8 - offset_y)
+        hip = pygame.Vector2(self.pos.x, self.pos.y + 8 - offset_y)
+        arm_len = 15
+        leg_len = 18
+        phase = self.flail_phase
+
+        # Left arm
+        ang = math.pi / 2 + math.sin(phase) * 0.5
+        elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
+        hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
+        pygame.draw.line(surf, self.color, shoulder, elbow, 3)
+        pygame.draw.line(surf, self.color, elbow, hand, 3)
+
+        # Right arm (fixed if holding parachute)
+        if holding_chute:
+            ang = -math.pi / 4
+            target = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len * 2
+            pygame.draw.line(surf, self.color, shoulder, target, 3)
+        else:
+            ang = math.pi / 2 + math.sin(phase + math.pi) * 0.5
+            elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
+            hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
+            pygame.draw.line(surf, self.color, shoulder, elbow, 3)
+            pygame.draw.line(surf, self.color, elbow, hand, 3)
+
         # Legs
-        pygame.draw.line(surf, self.color,
-                         (self.pos.x, self.pos.y + 20 - offset_y),
-                         (self.pos.x - 8, self.pos.y + 30 - offset_y), 3)
-        pygame.draw.line(surf, self.color,
-                         (self.pos.x, self.pos.y + 20 - offset_y),
-                         (self.pos.x + 8, self.pos.y + 30 - offset_y), 3)
+        ang = math.pi / 2 + math.sin(phase + math.pi / 2) * 0.3
+        knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
+        foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
+        pygame.draw.line(surf, self.color, hip, knee, 3)
+        pygame.draw.line(surf, self.color, knee, foot, 3)
+
+        ang = math.pi / 2 + math.sin(phase + 3 * math.pi / 2) * 0.3
+        knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
+        foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
+        pygame.draw.line(surf, self.color, hip, knee, 3)
+        pygame.draw.line(surf, self.color, knee, foot, 3)
+
         if glow:
             pygame.draw.rect(surf, WHITE, self.rect.move(0, -offset_y).inflate(10, 10), 2)
 
@@ -133,15 +165,15 @@ class Parachute:
 
     def update(self, dt):
         if self.holder:
-            self.pos = self.holder.pos + pygame.Vector2(0, -40)
+            # Position near holder's right hand
+            self.pos = self.holder.pos + pygame.Vector2(15, -10)
         else:
             self.vel.y += 500 * dt
             self.pos += self.vel * dt
         self.rect.center = self.pos
 
     def draw(self, surf, offset_y=0):
-        if not self.holder:
-            pygame.draw.rect(surf, YELLOW, self.rect.move(0, -offset_y))
+        pygame.draw.rect(surf, YELLOW, self.rect.move(0, -offset_y))
 
 
 def draw_plane(surf, x, door_open, offset_y=0):
@@ -264,8 +296,8 @@ while running:
     elif state == 'fall':
         altitude -= 450 * dt
         plane_x += 200 * dt
-        p_red.update(dt)
-        p_blue.update(dt)
+        p_red.update(dt, slowed=(chute.holder == p_red))
+        p_blue.update(dt, slowed=(chute.holder == p_blue))
         chute.update(dt)
 
         min_y = min(p_red.pos.y, p_blue.pos.y)
@@ -300,8 +332,10 @@ while running:
 
         screen.fill(SKY)
         draw_plane(screen, plane_x, True, camera_y)
-        p_red.draw(screen, glow=(chute.holder == p_red), offset_y=camera_y)
-        p_blue.draw(screen, glow=(chute.holder == p_blue), offset_y=camera_y)
+        p_red.draw(screen, glow=(chute.holder == p_red), offset_y=camera_y,
+                   holding_chute=(chute.holder == p_red))
+        p_blue.draw(screen, glow=(chute.holder == p_blue), offset_y=camera_y,
+                    holding_chute=(chute.holder == p_blue))
         chute.draw(screen, offset_y=camera_y)
         alt_txt = font.render(f"Altitude: {int(altitude)} m", True, BLACK)
         screen.blit(alt_txt, (10, 10))
@@ -348,8 +382,8 @@ while running:
             sy = barn.bottom - 10
             draw_sheep(screen, sx, sy)
         # Draw players
-        p_red.draw(screen, glow=(winner == p_red))
-        p_blue.draw(screen, glow=(winner == p_blue))
+        p_red.draw(screen, glow=(winner == p_red), holding_chute=False)
+        p_blue.draw(screen, glow=(winner == p_blue), holding_chute=False)
         # Draw parachute canopy
         pygame.draw.circle(screen, YELLOW, (int(chute.pos.x), int(chute.pos.y)), 40)
         pygame.draw.line(screen, BLACK, (chute.pos.x - 40, chute.pos.y), (winner.pos.x, winner.pos.y), 2)
@@ -369,8 +403,8 @@ while running:
             sx = barn.left + 30 + i * 30
             sy = barn.bottom - 10
             draw_sheep(screen, sx, sy)
-        p_red.draw(screen, glow=(winner == p_red))
-        p_blue.draw(screen, glow=(winner == p_blue))
+        p_red.draw(screen, glow=(winner == p_red), holding_chute=False)
+        p_blue.draw(screen, glow=(winner == p_blue), holding_chute=False)
         pygame.draw.circle(screen, YELLOW, (int(chute.pos.x), int(chute.pos.y)), 40)
         pygame.draw.line(screen, BLACK, (chute.pos.x - 40, chute.pos.y), (winner.pos.x, winner.pos.y), 2)
         pygame.draw.line(screen, BLACK, (chute.pos.x + 40, chute.pos.y), (winner.pos.x, winner.pos.y), 2)
