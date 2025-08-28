@@ -76,13 +76,14 @@ class Player:
         self.rect = pygame.Rect(0, 0, 20, 35)
         self.cooldown = 0
 
-    def update(self, dt):
+    def update(self, dt, slow=False):
         keys = pygame.key.get_pressed()
         acc = pygame.Vector2(0, 0)
+        move = 200 * (0.6 if slow else 1)
         if keys[self.controls['left']]:
-            acc.x -= 200
+            acc.x -= move
         if keys[self.controls['right']]:
-            acc.x += 200
+            acc.x += move
         # Soft force toward center
         if self.pos.x < 50:
             acc.x += (50 - self.pos.x) * 2
@@ -93,9 +94,9 @@ class Player:
         self.pos.x += self.vel.x * dt
 
         if keys[self.controls['faster']]:
-            self.vel.y += 300 * dt
+            self.vel.y += 300 * (0.6 if slow else 1) * dt
         if keys[self.controls['slower']]:
-            self.vel.y -= 300 * dt
+            self.vel.y -= 300 * (0.6 if slow else 1) * dt
         self.vel.y += 500 * dt
         self.pos.y += self.vel.y * dt
         self.rect.topleft = (self.pos.x - 10, self.pos.y - 20)
@@ -106,19 +107,22 @@ class Player:
         # Head
         head_center = (int(self.pos.x), int(self.pos.y - 15))
         pygame.draw.circle(surf, (255, 224, 189), head_center, 8)
-        # Body
-        body_rect = pygame.Rect(int(self.pos.x - 10), int(self.pos.y - 5), 20, 25)
-        pygame.draw.rect(surf, self.color, body_rect)
+        # Body line
+        body_start = (self.pos.x, self.pos.y - 7)
+        body_end = (self.pos.x, self.pos.y + 15)
+        pygame.draw.line(surf, self.color, body_start, body_end, 4)
         # Arms
-        pygame.draw.line(surf, self.color, (self.pos.x - 10, self.pos.y),
-                         (self.pos.x + 10, self.pos.y), 3)
+        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y),
+                         (self.pos.x - 12, self.pos.y + 5), 3)
+        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y),
+                         (self.pos.x + 12, self.pos.y + 5), 3)
         # Legs
-        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 20),
-                         (self.pos.x - 8, self.pos.y + 30), 3)
-        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 20),
-                         (self.pos.x + 8, self.pos.y + 30), 3)
+        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 15),
+                         (self.pos.x - 10, self.pos.y + 30), 3)
+        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 15),
+                         (self.pos.x + 10, self.pos.y + 30), 3)
         if glow:
-            pygame.draw.rect(surf, WHITE, self.rect.inflate(10, 10), 2)
+            pygame.draw.circle(surf, WHITE, (int(self.pos.x), int(self.pos.y)), 25, 2)
 
 
 class Parachute:
@@ -130,15 +134,14 @@ class Parachute:
 
     def update(self, dt):
         if self.holder:
-            self.pos = self.holder.pos + pygame.Vector2(0, -40)
+            self.pos = self.holder.pos + pygame.Vector2(15, 0)
         else:
             self.vel.y += 500 * dt
             self.pos += self.vel * dt
         self.rect.center = self.pos
 
     def draw(self, surf):
-        if not self.holder:
-            pygame.draw.rect(surf, YELLOW, self.rect)
+        pygame.draw.rect(surf, YELLOW, self.rect)
 
 
 def draw_plane(surf, x, door_open):
@@ -258,8 +261,8 @@ while running:
 
     elif state == 'fall':
         altitude -= 450 * dt
-        p_red.update(dt)
-        p_blue.update(dt)
+        p_red.update(dt, slow=(chute.holder == p_red))
+        p_blue.update(dt, slow=(chute.holder == p_blue))
         chute.update(dt)
 
         if chute.holder is None:
