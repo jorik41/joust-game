@@ -28,22 +28,43 @@ font = pygame.font.SysFont(None, 32)
 bigfont = pygame.font.SysFont(None, 72)
 
 
-def make_sound(freq, duration=0.3, volume=0.5):
+def make_sound(freq, duration=0.3, volume=0.5, waveform='sine'):
     sample_rate = 44100
     n_samples = int(sample_rate * duration)
-    buf = array.array('h', [
-        int(volume * 32767 * math.sin(2 * math.pi * freq * i / sample_rate))
-        for i in range(n_samples)
-    ])
+    buf = array.array('h')
+    for i in range(n_samples):
+        t = i / sample_rate
+        if waveform == 'sine':
+            val = math.sin(2 * math.pi * freq * t)
+        elif waveform == 'square':
+            val = 1.0 if math.sin(2 * math.pi * freq * t) >= 0 else -1.0
+        elif waveform == 'noise':
+            val = random.uniform(-1, 1)
+        else:
+            val = 0
+        buf.append(int(volume * 32767 * val))
     return pygame.mixer.Sound(buffer=buf)
 
 
-# Sounds (simple generated tones)
-plane_sound = make_sound(110, 0.5, 0.4)
-wind_sound = make_sound(300, 0.5, 0.4)
-blip_sound = make_sound(800, 0.1, 0.4)
-thud_sound = make_sound(60, 0.5, 0.6)
-sheep_sound = make_sound(500, 0.3, 0.6)
+def make_baa_sound():
+    sample_rate = 44100
+    duration = 0.6
+    n_samples = int(sample_rate * duration)
+    buf = array.array('h')
+    for i in range(n_samples):
+        t = i / sample_rate
+        freq = 700 if t < duration / 2 else 500
+        val = math.sin(2 * math.pi * freq * t)
+        buf.append(int(0.6 * 32767 * val))
+    return pygame.mixer.Sound(buffer=buf)
+
+
+# Sounds
+plane_sound = make_sound(110, 0.5, 0.4, 'square')
+wind_sound = make_sound(0, 1.0, 0.3, 'noise')
+blip_sound = make_sound(800, 0.1, 0.4, 'square')
+thud_sound = make_sound(0, 0.5, 0.6, 'noise')
+sheep_sound = make_baa_sound()
 
 
 class Player:
@@ -52,7 +73,7 @@ class Player:
         self.vel = pygame.Vector2(0, 0)
         self.color = color
         self.controls = controls
-        self.rect = pygame.Rect(0, 0, 30, 30)
+        self.rect = pygame.Rect(0, 0, 20, 35)
         self.cooldown = 0
 
     def update(self, dt):
@@ -77,12 +98,25 @@ class Player:
             self.vel.y -= 300 * dt
         self.vel.y += 500 * dt
         self.pos.y += self.vel.y * dt
-        self.rect.topleft = (self.pos.x - 15, self.pos.y - 15)
+        self.rect.topleft = (self.pos.x - 10, self.pos.y - 20)
         if self.cooldown > 0:
             self.cooldown -= dt
 
     def draw(self, surf, glow=False):
-        pygame.draw.rect(surf, self.color, self.rect)
+        # Head
+        head_center = (int(self.pos.x), int(self.pos.y - 15))
+        pygame.draw.circle(surf, (255, 224, 189), head_center, 8)
+        # Body
+        body_rect = pygame.Rect(int(self.pos.x - 10), int(self.pos.y - 5), 20, 25)
+        pygame.draw.rect(surf, self.color, body_rect)
+        # Arms
+        pygame.draw.line(surf, self.color, (self.pos.x - 10, self.pos.y),
+                         (self.pos.x + 10, self.pos.y), 3)
+        # Legs
+        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 20),
+                         (self.pos.x - 8, self.pos.y + 30), 3)
+        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 20),
+                         (self.pos.x + 8, self.pos.y + 30), 3)
         if glow:
             pygame.draw.rect(surf, WHITE, self.rect.inflate(10, 10), 2)
 
@@ -105,6 +139,35 @@ class Parachute:
     def draw(self, surf):
         if not self.holder:
             pygame.draw.rect(surf, YELLOW, self.rect)
+
+
+def draw_plane(surf, x, door_open):
+    body = pygame.Rect(x, 80, 120, 40)
+    pygame.draw.rect(surf, (200, 200, 200), body)
+    wing = pygame.Rect(x + 10, 95, 100, 15)
+    pygame.draw.rect(surf, (180, 180, 180), wing)
+    tail = pygame.Rect(x - 20, 85, 40, 20)
+    pygame.draw.rect(surf, (180, 180, 180), tail)
+    for i in range(3):
+        window = pygame.Rect(x + 20 + i * 30, 90, 15, 10)
+        pygame.draw.rect(surf, SKY, window)
+        pygame.draw.rect(surf, BLACK, window, 1)
+    door = pygame.Rect(x + 80, 90, 30, 20)
+    if door_open:
+        pygame.draw.rect(surf, BLACK, door, 2)
+    else:
+        pygame.draw.rect(surf, BLACK, door)
+
+
+def draw_sheep(surf, x, y):
+    body = pygame.Rect(x - 20, y - 10, 40, 20)
+    pygame.draw.ellipse(surf, WHITE, body)
+    head = pygame.Rect(x + 10, y - 8, 16, 16)
+    pygame.draw.ellipse(surf, WHITE, head)
+    pygame.draw.circle(surf, BLACK, (x + 18, y - 2), 2)
+    pygame.draw.circle(surf, BLACK, (x + 24, y - 2), 2)
+    for dx in (-10, -5, 5, 10):
+        pygame.draw.rect(surf, BLACK, (x + dx, y + 8, 3, 8))
 
 
 # Game variables
@@ -173,18 +236,16 @@ while running:
     elif state == 'plane':
         screen.fill(SKY)
         plane_x += 200 * dt
-        plane_rect = pygame.Rect(plane_x, 80, 120, 40)
-        pygame.draw.rect(screen, (200, 200, 200), plane_rect)
         if plane_pass == 0:
-            pygame.draw.rect(screen, BLACK, (plane_x + 80, 90, 30, 20))
+            draw_plane(screen, plane_x, False)
             if plane_x > WIDTH:
                 plane_pass = 1
                 plane_x = -150
         else:
             if plane_x < WIDTH / 2:
-                pygame.draw.rect(screen, BLACK, (plane_x + 80, 90, 30, 20))
+                draw_plane(screen, plane_x, False)
             else:
-                pygame.draw.rect(screen, BLACK, (plane_x + 80, 90, 30, 20), 2)
+                draw_plane(screen, plane_x, True)
                 if not plane_door_opened:
                     # Drop players and parachute
                     p_red.pos = pygame.Vector2(plane_x + 80, 110)
@@ -271,10 +332,10 @@ while running:
         if loser_crashed:
             hole = pygame.Rect(barn.centerx - 20, barn.top - 20, 40, 40)
             pygame.draw.rect(screen, BLACK, hole)
-            for i in range(3):
-                sx = barn.left + 30 + i * 30
-                sy = barn.bottom - 20
-                pygame.draw.circle(screen, WHITE, (sx, sy), 10)
+        for i in range(3):
+            sx = barn.left + 30 + i * 30
+            sy = barn.bottom - 10
+            draw_sheep(screen, sx, sy)
         # Draw players
         p_red.draw(screen, glow=(winner == p_red))
         p_blue.draw(screen, glow=(winner == p_blue))
@@ -295,8 +356,8 @@ while running:
         pygame.draw.rect(screen, BLACK, hole)
         for i in range(3):
             sx = barn.left + 30 + i * 30
-            sy = barn.bottom - 20
-            pygame.draw.circle(screen, WHITE, (sx, sy), 10)
+            sy = barn.bottom - 10
+            draw_sheep(screen, sx, sy)
         p_red.draw(screen, glow=(winner == p_red))
         p_blue.draw(screen, glow=(winner == p_blue))
         pygame.draw.circle(screen, YELLOW, (int(chute.pos.x), int(chute.pos.y)), 40)
