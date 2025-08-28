@@ -81,11 +81,11 @@ class Player:
     def update(self, dt, slowed=False):
         keys = pygame.key.get_pressed()
         acc = pygame.Vector2(0, 0)
-        speed = 0.7 if slowed else 1.0
+        speed_x = 0.7 if slowed else 1.0
         if keys[self.controls['left']]:
-            acc.x -= 200 * speed
+            acc.x -= 200 * speed_x
         if keys[self.controls['right']]:
-            acc.x += 200 * speed
+            acc.x += 200 * speed_x
         # Soft force toward center
         if self.pos.x < 50:
             acc.x += (50 - self.pos.x) * 2
@@ -93,14 +93,14 @@ class Player:
             acc.x -= (self.pos.x - (WIDTH - 50)) * 2
         self.vel.x += acc.x * dt
         self.vel.x *= 0.98
-        self.pos.x += self.vel.x * dt * speed
+        self.pos.x += self.vel.x * dt * speed_x
 
         if keys[self.controls['faster']]:
-            self.vel.y += 300 * dt * speed
+            self.vel.y += 300 * dt
         if keys[self.controls['slower']]:
-            self.vel.y -= 300 * dt * speed
-        self.vel.y += 500 * dt * speed
-        self.pos.y += self.vel.y * dt * speed
+            self.vel.y -= 300 * dt
+        self.vel.y += 500 * dt
+        self.pos.y += self.vel.y * dt
         self.rect.topleft = (self.pos.x - 10, self.pos.y - 20)
         if self.cooldown > 0:
             self.cooldown -= dt
@@ -121,7 +121,7 @@ class Player:
         phase = self.flail_phase
 
         # Left arm
-        ang = math.pi / 2 + math.sin(phase) * 0.5
+        ang = math.pi / 2 + math.sin(phase) * 0.5 - 0.2
         elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
         hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
         pygame.draw.line(surf, self.color, shoulder, elbow, 3)
@@ -133,20 +133,20 @@ class Player:
             target = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len * 2
             pygame.draw.line(surf, self.color, shoulder, target, 3)
         else:
-            ang = math.pi / 2 + math.sin(phase + math.pi) * 0.5
+            ang = math.pi / 2 + math.sin(phase + math.pi) * 0.5 - 0.2
             elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
             hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
             pygame.draw.line(surf, self.color, shoulder, elbow, 3)
             pygame.draw.line(surf, self.color, elbow, hand, 3)
 
         # Legs
-        ang = math.pi / 2 + math.sin(phase + math.pi / 2) * 0.3
+        ang = math.pi / 2 + math.sin(phase + math.pi / 2) * 0.3 - 0.3
         knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
         foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
         pygame.draw.line(surf, self.color, hip, knee, 3)
         pygame.draw.line(surf, self.color, knee, foot, 3)
 
-        ang = math.pi / 2 + math.sin(phase + 3 * math.pi / 2) * 0.3
+        ang = math.pi / 2 + math.sin(phase + 3 * math.pi / 2) * 0.3 - 0.3
         knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
         foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
         pygame.draw.line(surf, self.color, hip, knee, 3)
@@ -205,7 +205,40 @@ def draw_sheep(surf, x, y):
         pygame.draw.rect(surf, BLACK, (x + dx, y + 8, 3, 8))
 
 
+class WindStreak:
+    def __init__(self):
+        self.x = random.uniform(0, WIDTH)
+        self.y = HEIGHT + random.uniform(0, HEIGHT)
+        self.speed = random.uniform(300, 500)
+        self.length = random.randint(10, 30)
+
+    def update(self, dt):
+        self.y -= self.speed * dt
+
+    def draw(self, surf):
+        start = (self.x, self.y)
+        end = (self.x, self.y + self.length)
+        pygame.draw.line(surf, WHITE, start, end, 1)
+
+
+class Cloud:
+    def __init__(self, x, y):
+        self.pos = pygame.Vector2(x, y)
+        self.speed = random.uniform(20, 60)
+        self.size = random.randint(60, 120)
+
+    def update(self, dt):
+        self.pos.y += self.speed * dt
+
+    def draw(self, surf, offset_y=0):
+        rect = pygame.Rect(0, 0, self.size, int(self.size * 0.6))
+        rect.center = (self.pos.x, self.pos.y - offset_y)
+        pygame.draw.ellipse(surf, WHITE, rect)
+
+
 # Game variables
+wind_streaks = []
+clouds = []
 state = 'intro'
 plane_x = -150
 plane_pass = 0
@@ -228,6 +261,7 @@ chute = Parachute((p_red.pos.x + p_blue.pos.x) / 2)
 def reset_game():
     global plane_x, plane_pass, plane_door_opened, altitude
     global winner, loser, loser_crashed, state, camera_y
+    global wind_streaks, clouds
     p_red.pos = pygame.Vector2(300, 120)
     p_red.vel = pygame.Vector2(0, 0)
     p_red.cooldown = 0
@@ -245,6 +279,8 @@ def reset_game():
     loser = None
     loser_crashed = False
     camera_y = 0
+    wind_streaks.clear()
+    clouds.clear()
     state = 'plane'
     plane_sound.play(-1)
 
@@ -303,6 +339,21 @@ while running:
         min_y = min(p_red.pos.y, p_blue.pos.y)
         camera_y = max(0, min_y - 200)
 
+        if random.random() < 0.3:
+            wind_streaks.append(WindStreak())
+        for w in wind_streaks[:]:
+            w.update(dt)
+            if w.y + w.length < 0:
+                wind_streaks.remove(w)
+
+        if random.random() < 0.02:
+            cloud_y = camera_y - random.uniform(100, 300)
+            clouds.append(Cloud(random.uniform(0, WIDTH), cloud_y))
+        for c in clouds[:]:
+            c.update(dt)
+            if c.pos.y - camera_y > HEIGHT + c.size:
+                clouds.remove(c)
+
         if chute.holder is None:
             if chute.rect.colliderect(p_red.rect):
                 chute.holder = p_red
@@ -331,12 +382,16 @@ while running:
             camera_y = 0
 
         screen.fill(SKY)
+        for w in wind_streaks:
+            w.draw(screen)
         draw_plane(screen, plane_x, True, camera_y)
         p_red.draw(screen, glow=(chute.holder == p_red), offset_y=camera_y,
                    holding_chute=(chute.holder == p_red))
         p_blue.draw(screen, glow=(chute.holder == p_blue), offset_y=camera_y,
                     holding_chute=(chute.holder == p_blue))
         chute.draw(screen, offset_y=camera_y)
+        for c in clouds:
+            c.draw(screen, offset_y=camera_y)
         alt_txt = font.render(f"Altitude: {int(altitude)} m", True, BLACK)
         screen.blit(alt_txt, (10, 10))
         holder_txt = "None"
