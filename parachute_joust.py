@@ -102,23 +102,26 @@ class Player:
         if self.cooldown > 0:
             self.cooldown -= dt
 
-    def draw(self, surf, glow=False):
+    def draw(self, surf, glow=False, offset_y=0):
         # Head
-        head_center = (int(self.pos.x), int(self.pos.y - 15))
+        head_center = (int(self.pos.x), int(self.pos.y - 15 - offset_y))
         pygame.draw.circle(surf, (255, 224, 189), head_center, 8)
         # Body
-        body_rect = pygame.Rect(int(self.pos.x - 10), int(self.pos.y - 5), 20, 25)
+        body_rect = pygame.Rect(int(self.pos.x - 10), int(self.pos.y - 5 - offset_y), 20, 25)
         pygame.draw.rect(surf, self.color, body_rect)
         # Arms
-        pygame.draw.line(surf, self.color, (self.pos.x - 10, self.pos.y),
-                         (self.pos.x + 10, self.pos.y), 3)
+        pygame.draw.line(surf, self.color,
+                         (self.pos.x - 10, self.pos.y - offset_y),
+                         (self.pos.x + 10, self.pos.y - offset_y), 3)
         # Legs
-        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 20),
-                         (self.pos.x - 8, self.pos.y + 30), 3)
-        pygame.draw.line(surf, self.color, (self.pos.x, self.pos.y + 20),
-                         (self.pos.x + 8, self.pos.y + 30), 3)
+        pygame.draw.line(surf, self.color,
+                         (self.pos.x, self.pos.y + 20 - offset_y),
+                         (self.pos.x - 8, self.pos.y + 30 - offset_y), 3)
+        pygame.draw.line(surf, self.color,
+                         (self.pos.x, self.pos.y + 20 - offset_y),
+                         (self.pos.x + 8, self.pos.y + 30 - offset_y), 3)
         if glow:
-            pygame.draw.rect(surf, WHITE, self.rect.inflate(10, 10), 2)
+            pygame.draw.rect(surf, WHITE, self.rect.move(0, -offset_y).inflate(10, 10), 2)
 
 
 class Parachute:
@@ -136,23 +139,23 @@ class Parachute:
             self.pos += self.vel * dt
         self.rect.center = self.pos
 
-    def draw(self, surf):
+    def draw(self, surf, offset_y=0):
         if not self.holder:
-            pygame.draw.rect(surf, YELLOW, self.rect)
+            pygame.draw.rect(surf, YELLOW, self.rect.move(0, -offset_y))
 
 
-def draw_plane(surf, x, door_open):
-    body = pygame.Rect(x, 80, 120, 40)
+def draw_plane(surf, x, door_open, offset_y=0):
+    body = pygame.Rect(x, 80 - offset_y, 120, 40)
     pygame.draw.rect(surf, (200, 200, 200), body)
-    wing = pygame.Rect(x + 10, 95, 100, 15)
+    wing = pygame.Rect(x + 10, 95 - offset_y, 100, 15)
     pygame.draw.rect(surf, (180, 180, 180), wing)
-    tail = pygame.Rect(x - 20, 85, 40, 20)
+    tail = pygame.Rect(x - 20, 85 - offset_y, 40, 20)
     pygame.draw.rect(surf, (180, 180, 180), tail)
     for i in range(3):
-        window = pygame.Rect(x + 20 + i * 30, 90, 15, 10)
+        window = pygame.Rect(x + 20 + i * 30, 90 - offset_y, 15, 10)
         pygame.draw.rect(surf, SKY, window)
         pygame.draw.rect(surf, BLACK, window, 1)
-    door = pygame.Rect(x + 80, 90, 30, 20)
+    door = pygame.Rect(x + 80, 90 - offset_y, 30, 20)
     if door_open:
         pygame.draw.rect(surf, BLACK, door, 2)
     else:
@@ -179,6 +182,7 @@ altitude = 10000
 winner = None
 loser = None
 loser_crashed = False
+camera_y = 0
 
 
 # Players and parachute placeholders
@@ -191,7 +195,7 @@ chute = Parachute((p_red.pos.x + p_blue.pos.x) / 2)
 
 def reset_game():
     global plane_x, plane_pass, plane_door_opened, altitude
-    global winner, loser, loser_crashed, state
+    global winner, loser, loser_crashed, state, camera_y
     p_red.pos = pygame.Vector2(300, 120)
     p_red.vel = pygame.Vector2(0, 0)
     p_red.cooldown = 0
@@ -208,6 +212,7 @@ def reset_game():
     winner = None
     loser = None
     loser_crashed = False
+    camera_y = 0
     state = 'plane'
     plane_sound.play(-1)
 
@@ -258,9 +263,13 @@ while running:
 
     elif state == 'fall':
         altitude -= 450 * dt
+        plane_x += 200 * dt
         p_red.update(dt)
         p_blue.update(dt)
         chute.update(dt)
+
+        min_y = min(p_red.pos.y, p_blue.pos.y)
+        camera_y = max(0, min_y - 200)
 
         if chute.holder is None:
             if chute.rect.colliderect(p_red.rect):
@@ -287,11 +296,13 @@ while running:
             loser = p_blue if winner == p_red else p_red
             state = 'resolution'
             wind_sound.stop()
+            camera_y = 0
 
         screen.fill(SKY)
-        p_red.draw(screen, glow=(chute.holder == p_red))
-        p_blue.draw(screen, glow=(chute.holder == p_blue))
-        chute.draw(screen)
+        draw_plane(screen, plane_x, True, camera_y)
+        p_red.draw(screen, glow=(chute.holder == p_red), offset_y=camera_y)
+        p_blue.draw(screen, glow=(chute.holder == p_blue), offset_y=camera_y)
+        chute.draw(screen, offset_y=camera_y)
         alt_txt = font.render(f"Altitude: {int(altitude)} m", True, BLACK)
         screen.blit(alt_txt, (10, 10))
         holder_txt = "None"
