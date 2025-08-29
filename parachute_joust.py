@@ -118,12 +118,12 @@ class Player:
         self.flail_phase += dt * 5
 
     def draw(self, surf, glow=False, offset_y=0, holding_chute=False):
-        head_center = (int(self.pos.x), int(self.pos.y - 20 - offset_y))
+        head_center = (int(self.pos.x), int(self.pos.y - 22 - offset_y))
         pygame.draw.circle(surf, (255, 224, 189), head_center, 8)
+
         # Torso
-        body_start = (self.pos.x, self.pos.y - 12 - offset_y)
-        body_end = (self.pos.x, self.pos.y + 8 - offset_y)
-        pygame.draw.line(surf, self.color, body_start, body_end, 4)
+        body_rect = pygame.Rect(self.pos.x - 8, self.pos.y - 14 - offset_y, 16, 24)
+        pygame.draw.rect(surf, self.color, body_rect)
 
         shoulder = pygame.Vector2(self.pos.x, self.pos.y - 8 - offset_y)
         hip = pygame.Vector2(self.pos.x, self.pos.y + 8 - offset_y)
@@ -135,33 +135,38 @@ class Player:
         ang = math.pi / 2 + math.sin(phase) * 0.5 - 0.2
         elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
         hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
-        pygame.draw.line(surf, self.color, shoulder, elbow, 3)
-        pygame.draw.line(surf, self.color, elbow, hand, 3)
+        pygame.draw.line(surf, self.color, shoulder, elbow, 4)
+        pygame.draw.line(surf, self.color, elbow, hand, 4)
+        pygame.draw.circle(surf, self.color, (int(hand.x), int(hand.y)), 3)
 
         # Right arm (fixed if holding parachute)
         if holding_chute:
             ang = -math.pi / 4
             target = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len * 2
-            pygame.draw.line(surf, self.color, shoulder, target, 3)
+            pygame.draw.line(surf, self.color, shoulder, target, 4)
+            pygame.draw.circle(surf, self.color, (int(target.x), int(target.y)), 3)
         else:
             ang = math.pi / 2 + math.sin(phase + math.pi) * 0.5 - 0.2
             elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
             hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
-            pygame.draw.line(surf, self.color, shoulder, elbow, 3)
-            pygame.draw.line(surf, self.color, elbow, hand, 3)
+            pygame.draw.line(surf, self.color, shoulder, elbow, 4)
+            pygame.draw.line(surf, self.color, elbow, hand, 4)
+            pygame.draw.circle(surf, self.color, (int(hand.x), int(hand.y)), 3)
 
         # Legs
         ang = math.pi / 2 + math.sin(phase + math.pi / 2) * 0.3 - 0.3
         knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
         foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
-        pygame.draw.line(surf, self.color, hip, knee, 3)
-        pygame.draw.line(surf, self.color, knee, foot, 3)
+        pygame.draw.line(surf, self.color, hip, knee, 4)
+        pygame.draw.line(surf, self.color, knee, foot, 4)
+        pygame.draw.circle(surf, self.color, (int(foot.x), int(foot.y)), 3)
 
         ang = math.pi / 2 + math.sin(phase + 3 * math.pi / 2) * 0.3 - 0.3
         knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
         foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
-        pygame.draw.line(surf, self.color, hip, knee, 3)
-        pygame.draw.line(surf, self.color, knee, foot, 3)
+        pygame.draw.line(surf, self.color, hip, knee, 4)
+        pygame.draw.line(surf, self.color, knee, foot, 4)
+        pygame.draw.circle(surf, self.color, (int(foot.x), int(foot.y)), 3)
 
         if glow:
             pygame.draw.rect(surf, WHITE, self.rect.move(0, -offset_y).inflate(10, 10), 2)
@@ -189,15 +194,28 @@ class Parachute:
 
 def draw_plane(surf, x, door_open, offset_y=0):
     body = pygame.Rect(x, 80 - offset_y, 120, 40)
-    pygame.draw.rect(surf, (200, 200, 200), body)
-    wing = pygame.Rect(x + 10, 95 - offset_y, 100, 15)
-    pygame.draw.rect(surf, (180, 180, 180), wing)
-    tail = pygame.Rect(x - 20, 85 - offset_y, 40, 20)
-    pygame.draw.rect(surf, (180, 180, 180), tail)
+    pygame.draw.rect(surf, (210, 210, 210), body, border_radius=10)
+
+    # Nose cone
+    nose = [(x + 120, 100 - offset_y), (x + 140, 90 - offset_y),
+            (x + 140, 110 - offset_y)]
+    pygame.draw.polygon(surf, (210, 210, 210), nose)
+
+    # Wing
+    wing = [(x + 30, 95 - offset_y), (x + 110, 80 - offset_y),
+            (x + 90, 110 - offset_y), (x + 30, 110 - offset_y)]
+    pygame.draw.polygon(surf, (180, 180, 180), wing)
+
+    # Tail fin
+    tail = [(x, 80 - offset_y), (x - 30, 70 - offset_y),
+            (x - 30, 110 - offset_y), (x, 100 - offset_y)]
+    pygame.draw.polygon(surf, (180, 180, 180), tail)
+
     for i in range(3):
         window = pygame.Rect(x + 20 + i * 30, 90 - offset_y, 15, 10)
-        pygame.draw.rect(surf, SKY, window)
-        pygame.draw.rect(surf, BLACK, window, 1)
+        pygame.draw.rect(surf, SKY, window, border_radius=3)
+        pygame.draw.rect(surf, BLACK, window, 1, border_radius=3)
+
     door = pygame.Rect(x + 80, 90 - offset_y, 30, 20)
     if door_open:
         pygame.draw.rect(surf, BLACK, door, 2)
@@ -239,7 +257,8 @@ class Cloud:
         self.size = random.randint(60, 120)
 
     def update(self, dt):
-        self.pos.y += self.speed * dt
+        """Drift the cloud sideways across the sky."""
+        self.pos.x -= self.speed * dt
 
     def draw(self, surf, offset_y=0):
         rect = pygame.Rect(0, 0, self.size, int(self.size * 0.6))
@@ -313,11 +332,12 @@ while running:
     if state == 'intro':
         draw_gradient(screen, (20, 20, 60), (0, 0, 0))
         if random.random() < 0.02:
-            intro_clouds.append(Cloud(random.uniform(0, WIDTH), -50))
+            y = random.uniform(50, HEIGHT // 2)
+            intro_clouds.append(Cloud(WIDTH + 60, y))
         for cl in intro_clouds[:]:
             cl.update(dt)
             cl.draw(screen)
-            if cl.pos.y > HEIGHT + cl.size:
+            if cl.pos.x + cl.size < 0:
                 intro_clouds.remove(cl)
         t = bigfont.render("Parachute Joust", True, WHITE)
         screen.blit(t, t.get_rect(center=(WIDTH // 2, HEIGHT // 3)))
@@ -368,11 +388,11 @@ while running:
                 wind_streaks.remove(w)
 
         if random.random() < 0.02:
-            cloud_y = camera_y - random.uniform(100, 300)
-            clouds.append(Cloud(random.uniform(0, WIDTH), cloud_y))
+            cloud_y = camera_y + random.uniform(-100, HEIGHT)
+            clouds.append(Cloud(WIDTH + 60, cloud_y))
         for c in clouds[:]:
             c.update(dt)
-            if c.pos.y - camera_y > HEIGHT + c.size:
+            if c.pos.x + c.size < 0:
                 clouds.remove(c)
 
         if chute.holder is None:
