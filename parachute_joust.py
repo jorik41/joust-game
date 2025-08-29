@@ -110,6 +110,8 @@ class Player:
             self.vel.y -= 300 * dt
         self.vel.y += 500 * dt
         self.pos.y += self.vel.y * dt
+        # Keep player within vertical screen bounds
+        self.pos.y = max(10, min(HEIGHT - 10, self.pos.y))
         self.rect.topleft = (self.pos.x - 10, self.pos.y - 20)
         if self.cooldown > 0:
             self.cooldown -= dt
@@ -427,10 +429,12 @@ while running:
             winner.vel.y = max(winner.vel.y, 0)
             winner.vel.y += 40 * dt
             winner.pos.y += winner.vel.y * dt
+            winner.pos.y = max(10, min(HEIGHT - 10, winner.pos.y))
             chute.pos = winner.pos + pygame.Vector2(0, -80)
         if loser:
             loser.vel.y += 1000 * dt
             loser.pos.y += loser.vel.y * dt
+            loser.pos.y = max(10, min(HEIGHT - 10, loser.pos.y))
             if not loser_crashed and loser.pos.y >= GROUND_Y:
                 loser_crashed = True
                 loser.pos.y = GROUND_Y
