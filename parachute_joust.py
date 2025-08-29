@@ -1,5 +1,4 @@
 import os
-os.environ.setdefault('SDL_AUDIODRIVER', 'dummy')
 import pygame
 import math
 import random
@@ -18,6 +17,15 @@ GREEN = (50, 200, 50)
 BROWN = (139, 69, 19)
 SKY = (135, 206, 235)
 YELLOW = (255, 255, 0)
+
+
+def draw_gradient(surf, top_color, bottom_color):
+    """Fill *surf* with a vertical gradient from *top_color* to *bottom_color*."""
+    height = surf.get_height()
+    for y in range(height):
+        t = y / height
+        color = [int(top_color[i] * (1 - t) + bottom_color[i] * t) for i in range(3)]
+        pygame.draw.line(surf, color, (0, y), (surf.get_width(), y))
 
 pygame.init()
 pygame.mixer.init()
@@ -81,19 +89,20 @@ class Player:
     def update(self, dt, slowed=False):
         keys = pygame.key.get_pressed()
         acc = pygame.Vector2(0, 0)
-        speed_x = 0.7 if slowed else 1.0
+        # Slow horizontally when near screen edges so players cannot leave view
+        left_dist = self.pos.x
+        right_dist = WIDTH - self.pos.x
+        edge_dist = min(left_dist, right_dist)
+        edge_factor = max(0.2, min(1.0, edge_dist / 100))
+        speed_x = (0.7 if slowed else 1.0) * edge_factor
         if keys[self.controls['left']]:
-            acc.x -= 200 * speed_x
+            acc.x -= 200 * edge_factor
         if keys[self.controls['right']]:
-            acc.x += 200 * speed_x
-        # Soft force toward center
-        if self.pos.x < 50:
-            acc.x += (50 - self.pos.x) * 2
-        if self.pos.x > WIDTH - 50:
-            acc.x -= (self.pos.x - (WIDTH - 50)) * 2
+            acc.x += 200 * edge_factor
         self.vel.x += acc.x * dt
         self.vel.x *= 0.98
         self.pos.x += self.vel.x * dt * speed_x
+        self.pos.x = max(10, min(WIDTH - 10, self.pos.x))
 
         if keys[self.controls['faster']]:
             self.vel.y += 300 * dt
@@ -239,6 +248,7 @@ class Cloud:
 # Game variables
 wind_streaks = []
 clouds = []
+intro_clouds = []
 state = 'intro'
 plane_x = -150
 plane_pass = 0
@@ -296,18 +306,27 @@ while running:
                 reset_game()
             elif state == 'end':
                 state = 'intro'
+                intro_clouds.clear()
 
     if state == 'intro':
-        screen.fill((20, 20, 60))
+        draw_gradient(screen, (20, 20, 60), (0, 0, 0))
+        if random.random() < 0.02:
+            intro_clouds.append(Cloud(random.uniform(0, WIDTH), -50))
+        for cl in intro_clouds[:]:
+            cl.update(dt)
+            cl.draw(screen)
+            if cl.pos.y > HEIGHT + cl.size:
+                intro_clouds.remove(cl)
         t = bigfont.render("Parachute Joust", True, WHITE)
         screen.blit(t, t.get_rect(center=(WIDTH // 2, HEIGHT // 3)))
         c = font.render("Red: A/D W/S   Blue: ←/→ ↑/↓", True, WHITE)
         screen.blit(c, c.get_rect(center=(WIDTH // 2, HEIGHT // 2)))
-        p = font.render("Press Enter to start", True, WHITE)
-        screen.blit(p, p.get_rect(center=(WIDTH // 2, HEIGHT * 2 // 3)))
+        if pygame.time.get_ticks() // 500 % 2:
+            p = font.render("Press Enter to start", True, WHITE)
+            screen.blit(p, p.get_rect(center=(WIDTH // 2, HEIGHT * 2 // 3)))
 
     elif state == 'plane':
-        screen.fill(SKY)
+        draw_gradient(screen, SKY, WHITE)
         plane_x += 200 * dt
         if plane_pass == 0:
             draw_plane(screen, plane_x, False)
@@ -381,7 +400,7 @@ while running:
             wind_sound.stop()
             camera_y = 0
 
-        screen.fill(SKY)
+        draw_gradient(screen, SKY, WHITE)
         for w in wind_streaks:
             w.draw(screen)
         draw_plane(screen, plane_x, True, camera_y)
@@ -421,7 +440,7 @@ while running:
             winner.pos.y = GROUND_Y - 40
             state = 'end'
 
-        screen.fill(SKY)
+        draw_gradient(screen, SKY, WHITE)
         # Draw barn and ground
         pygame.draw.rect(screen, GREEN, (0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y))
         barn = pygame.Rect(WIDTH // 2 - 60, GROUND_Y - 80, 120, 80)
@@ -440,12 +459,13 @@ while running:
         p_red.draw(screen, glow=(winner == p_red), holding_chute=False)
         p_blue.draw(screen, glow=(winner == p_blue), holding_chute=False)
         # Draw parachute canopy
-        pygame.draw.circle(screen, YELLOW, (int(chute.pos.x), int(chute.pos.y)), 40)
-        pygame.draw.line(screen, BLACK, (chute.pos.x - 40, chute.pos.y), (winner.pos.x, winner.pos.y), 2)
-        pygame.draw.line(screen, BLACK, (chute.pos.x + 40, chute.pos.y), (winner.pos.x, winner.pos.y), 2)
+        bob = math.sin(pygame.time.get_ticks() / 200) * 5
+        pygame.draw.circle(screen, YELLOW, (int(chute.pos.x), int(chute.pos.y + bob)), 40)
+        pygame.draw.line(screen, BLACK, (chute.pos.x - 40, chute.pos.y + bob), (winner.pos.x, winner.pos.y), 2)
+        pygame.draw.line(screen, BLACK, (chute.pos.x + 40, chute.pos.y + bob), (winner.pos.x, winner.pos.y), 2)
 
     elif state == 'end':
-        screen.fill(SKY)
+        draw_gradient(screen, SKY, WHITE)
         pygame.draw.rect(screen, GREEN, (0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y))
         barn = pygame.Rect(WIDTH // 2 - 60, GROUND_Y - 80, 120, 80)
         pygame.draw.rect(screen, BROWN, barn)
@@ -460,14 +480,16 @@ while running:
             draw_sheep(screen, sx, sy)
         p_red.draw(screen, glow=(winner == p_red), holding_chute=False)
         p_blue.draw(screen, glow=(winner == p_blue), holding_chute=False)
-        pygame.draw.circle(screen, YELLOW, (int(chute.pos.x), int(chute.pos.y)), 40)
-        pygame.draw.line(screen, BLACK, (chute.pos.x - 40, chute.pos.y), (winner.pos.x, winner.pos.y), 2)
-        pygame.draw.line(screen, BLACK, (chute.pos.x + 40, chute.pos.y), (winner.pos.x, winner.pos.y), 2)
+        bob = math.sin(pygame.time.get_ticks() / 200) * 5
+        pygame.draw.circle(screen, YELLOW, (int(chute.pos.x), int(chute.pos.y + bob)), 40)
+        pygame.draw.line(screen, BLACK, (chute.pos.x - 40, chute.pos.y + bob), (winner.pos.x, winner.pos.y), 2)
+        pygame.draw.line(screen, BLACK, (chute.pos.x + 40, chute.pos.y + bob), (winner.pos.x, winner.pos.y), 2)
         txt = "Red" if winner == p_red else "Blue"
         m = bigfont.render(f"{txt} Wins!", True, BLACK)
         screen.blit(m, m.get_rect(center=(WIDTH // 2, HEIGHT // 3)))
-        p = font.render("Press Enter to play again", True, BLACK)
-        screen.blit(p, p.get_rect(center=(WIDTH // 2, HEIGHT // 2)))
+        if pygame.time.get_ticks() // 500 % 2:
+            p = font.render("Press Enter to play again", True, BLACK)
+            screen.blit(p, p.get_rect(center=(WIDTH // 2, HEIGHT // 2)))
 
     pygame.display.flip()
 
