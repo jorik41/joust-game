@@ -35,6 +35,40 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 32)
 bigfont = pygame.font.SysFont(None, 72)
 
+assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+PLAYER_SHEET_PATH = os.path.join(assets_dir, "player.png")
+
+
+def ensure_player_sheet():
+    os.makedirs(assets_dir, exist_ok=True)
+    if os.path.exists(PLAYER_SHEET_PATH):
+        return
+    frame_w, frame_h = 20, 35
+    sheet = pygame.Surface((frame_w * 2, frame_h), pygame.SRCALPHA)
+
+    def draw_frame(surf, arms_up):
+        pygame.draw.rect(surf, WHITE, (8, 0, 4, 8))  # head
+        pygame.draw.rect(surf, WHITE, (5, 8, 10, 15))  # body
+        pygame.draw.rect(surf, WHITE, (7, 23, 2, 12))  # left leg
+        pygame.draw.rect(surf, WHITE, (11, 23, 2, 12))  # right leg
+        if arms_up:
+            pygame.draw.rect(surf, WHITE, (3, 0, 2, 10))
+            pygame.draw.rect(surf, WHITE, (15, 0, 2, 10))
+        else:
+            pygame.draw.rect(surf, WHITE, (3, 8, 2, 10))
+            pygame.draw.rect(surf, WHITE, (15, 8, 2, 10))
+
+    idle = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
+    draw_frame(idle, False)
+    sheet.blit(idle, (0, 0))
+    flail = pygame.Surface((frame_w, frame_h), pygame.SRCALPHA)
+    draw_frame(flail, True)
+    sheet.blit(flail, (frame_w, 0))
+    pygame.image.save(sheet, PLAYER_SHEET_PATH)
+
+
+ensure_player_sheet()
+
 
 def make_sound(freq, duration=0.3, volume=0.5, waveform='sine'):
     sample_rate = 44100
@@ -83,8 +117,16 @@ class Player:
         self.controls = controls
         self.rect = pygame.Rect(0, 0, 20, 35)
         self.cooldown = 0
-        # phase used to animate rag-doll limb flailing
-        self.flail_phase = random.random() * math.tau
+        # load generated sprite sheet and prepare animation frames
+        sheet = pygame.image.load(PLAYER_SHEET_PATH).convert_alpha()
+        frame_w, frame_h = 20, 35
+        self.frames = []
+        for i in range(sheet.get_width() // frame_w):
+            frame = sheet.subsurface(pygame.Rect(i * frame_w, 0, frame_w, frame_h)).copy()
+            frame.fill(self.color, special_flags=pygame.BLEND_MULT)
+            self.frames.append(frame)
+        self.frame_index = 0
+        self.anim_time = 0.0
 
     def update(self, dt, slowed=False):
         keys = pygame.key.get_pressed()
@@ -115,59 +157,12 @@ class Player:
         self.rect.topleft = (self.pos.x - 10, self.pos.y - 20)
         if self.cooldown > 0:
             self.cooldown -= dt
-        self.flail_phase += dt * 5
+        self.anim_time += dt * 10
+        self.frame_index = int(self.anim_time) % len(self.frames)
 
     def draw(self, surf, glow=False, offset_y=0, holding_chute=False):
-        head_center = (int(self.pos.x), int(self.pos.y - 22 - offset_y))
-        pygame.draw.circle(surf, (255, 224, 189), head_center, 8)
-
-        # Torso
-        body_rect = pygame.Rect(self.pos.x - 8, self.pos.y - 14 - offset_y, 16, 24)
-        pygame.draw.rect(surf, self.color, body_rect)
-
-        shoulder = pygame.Vector2(self.pos.x, self.pos.y - 8 - offset_y)
-        hip = pygame.Vector2(self.pos.x, self.pos.y + 8 - offset_y)
-        arm_len = 15
-        leg_len = 18
-        phase = self.flail_phase
-
-        # Left arm
-        ang = math.pi / 2 + math.sin(phase) * 0.5 - 0.2
-        elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
-        hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
-        pygame.draw.line(surf, self.color, shoulder, elbow, 4)
-        pygame.draw.line(surf, self.color, elbow, hand, 4)
-        pygame.draw.circle(surf, self.color, (int(hand.x), int(hand.y)), 3)
-
-        # Right arm (fixed if holding parachute)
-        if holding_chute:
-            ang = -math.pi / 4
-            target = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len * 2
-            pygame.draw.line(surf, self.color, shoulder, target, 4)
-            pygame.draw.circle(surf, self.color, (int(target.x), int(target.y)), 3)
-        else:
-            ang = math.pi / 2 + math.sin(phase + math.pi) * 0.5 - 0.2
-            elbow = shoulder + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
-            hand = elbow + pygame.Vector2(math.cos(ang), math.sin(ang)) * arm_len
-            pygame.draw.line(surf, self.color, shoulder, elbow, 4)
-            pygame.draw.line(surf, self.color, elbow, hand, 4)
-            pygame.draw.circle(surf, self.color, (int(hand.x), int(hand.y)), 3)
-
-        # Legs
-        ang = math.pi / 2 + math.sin(phase + math.pi / 2) * 0.3 - 0.3
-        knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
-        foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
-        pygame.draw.line(surf, self.color, hip, knee, 4)
-        pygame.draw.line(surf, self.color, knee, foot, 4)
-        pygame.draw.circle(surf, self.color, (int(foot.x), int(foot.y)), 3)
-
-        ang = math.pi / 2 + math.sin(phase + 3 * math.pi / 2) * 0.3 - 0.3
-        knee = hip + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
-        foot = knee + pygame.Vector2(math.cos(ang), math.sin(ang)) * leg_len
-        pygame.draw.line(surf, self.color, hip, knee, 4)
-        pygame.draw.line(surf, self.color, knee, foot, 4)
-        pygame.draw.circle(surf, self.color, (int(foot.x), int(foot.y)), 3)
-
+        frame = self.frames[self.frame_index]
+        surf.blit(frame, (self.rect.x, self.rect.y - offset_y))
         if glow:
             pygame.draw.rect(surf, WHITE, self.rect.move(0, -offset_y).inflate(10, 10), 2)
 
